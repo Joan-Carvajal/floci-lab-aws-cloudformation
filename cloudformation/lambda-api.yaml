@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda + API Gateway para healthcheck'
+
+Resources:
+  # Rol IAM para Lambda
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambda-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # Función Lambda
+  HealthcheckFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: healthcheck
+      Runtime: python3.11
+      Handler: healthcheck.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code: 
+        S3Bucket: "lambda-code-dev"
+        S3Key: "lambda-healthcheck.zip"
+      Timeout: 30
+      MemorySize: 128
+
+  # API Gateway REST API
+  ArkaApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: Arka API
+      Description: API para servicios Arka
+
+  # Resource /health
+  HealthResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ArkaApi
+      ParentId: !GetAtt ArkaApi.RootResourceId
+      PathPart: health
+
+  # Método GET
+  HealthGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ArkaApi
+      ResourceId: !Ref HealthResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !GetAtt HealthcheckFunction.Arn
+
+  # Permiso para que API Gateway invoque Lambda
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref HealthcheckFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ArkaApi}/*
+
+  # Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: HealthGetMethod
+    Properties:
+      RestApiId: !Ref ArkaApi
+
+  # Stage dev
+  DevStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref ArkaApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: dev
+
+Outputs:
+  LambdaFunctionArn:
+    Value: !GetAtt HealthcheckFunction.Arn
+  ApiGatewayUrl:
+    Value: !Sub https://${ArkaApi}.execute-api.${AWS::Region}.amazonaws.com/dev/health
+  LocalStackUrl:
+    Value: !Sub http://localhost:4566/restapis/${ArkaApi}/dev/_user_request_/health
