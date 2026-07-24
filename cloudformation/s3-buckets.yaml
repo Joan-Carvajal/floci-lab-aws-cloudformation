@@ -1,0 +1,49 @@
+# CloudFormation template para buckets S3
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Buckets S3 para el proyecto'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+Resources:
+  # Bucket para archivos de productos
+  ProductosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "arka-productos-${Environment}"
+      VersioningConfiguration:
+        Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST, DELETE]
+            AllowedOrigins: ['*']
+            MaxAge: 3000
+
+  # Bucket para reportes
+  ReportesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "arka-reportes-${Environment}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: 90
+
+  # Lambda buckets
+  LambdasBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "lambda-code-${Environment}"
+
+Outputs:
+  ProductosBucketName:
+    Value: !Ref ProductosBucket
+    Export:
+      Name: !Sub "${Environment}-ProductosBucket"
+  ReportesBucketName:
+    Value: !Ref ReportesBucket

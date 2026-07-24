@@ -10,6 +10,8 @@ services:
       - DEBUG=1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/floci
+      - ./cloudformation:/etc/floci/init/ready.d/cloudformation
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_floci/health"]
       interval: 10s
